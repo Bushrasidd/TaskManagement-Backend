@@ -1,7 +1,12 @@
+// server.js
 require('dotenv').config(); 
 const express = require('express');
 const cors = require('cors');
-const { connectDB } = require('./database'); 
+
+const { sequelize, connectDB } = require('./database'); 
+
+const User = require('./models/User');
+const Task = require('./models/Task');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -15,10 +20,12 @@ app.get('/', (req, res) => {
 
 const startServer = async () => {
   try {
-    await connectDB(); 
+    await connectDB();
+    await sequelize.sync({ alter: true });
+    console.log('Database schemas and tables synchronized perfectly!');
 
     app.listen(PORT, () => {
-      console.log(`🚀 Express Server operational on http://localhost:${PORT}`);
+      console.log(`Express Server operational on http://localhost:${PORT}`);
     });
 
   } catch (error) {
