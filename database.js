@@ -16,7 +16,7 @@ const sequelize = new Sequelize(
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
-    console.log('🐘 Express successfully connected to your existing Docker Postgres!');
+    console.log('Express successfully connected to your existing Docker Postgres!');
   } catch (error) {
     console.error('Database connection failed:', error.message);
     process.exit(1);

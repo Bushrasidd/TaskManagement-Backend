@@ -38,25 +38,20 @@ app.post('/api/register', async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
 
-    // 1. Check if user already exists
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
       return res.status(400).json({ message: 'Email is already registered' });
     }
-
-    // 2. Hash the password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // 3. Create the new user record
     const newUser = await User.create({
       name,
       email,
       password: hashedPassword,
-      role // Will use 'executive' default if not passed in body
+      role 
     });
 
-    // 4. Return user data (excluding password)
     res.status(201).json({
       message: 'User registered successfully',
       user: {
@@ -150,7 +145,6 @@ app.post('/api/tasks', async (req, res) => {
 
 app.get('/api/team-members', async (req, res) => {
   try {
-    // 1. Get the authenticated user's role from JWT (middleware/verification)
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
     const decodedUser = jwt.verify(token, JWT_SECRET);
@@ -224,6 +218,21 @@ app.delete('/api/tasks/:id', async (req, res) => {
     return res.status(200).json({ message: "Task deleted successfully" });
   } catch (error) {
     return res.status(500).json({ error: "Failed to delete task" });
+  }
+});
+
+
+app.put('/api/tasks/update/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [updated] = await Task.update(req.body, { where: { id } });
+    if (updated) {
+      const updatedTask = await Task.findByPk(id);
+      return res.status(200).json(updatedTask);
+    }
+    throw new Error('Task not found');
+  } catch (error) {
+    res.status(500).json({ error: "Failed to update task" });
   }
 });
 
