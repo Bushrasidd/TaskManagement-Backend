@@ -1,10 +1,10 @@
-require('dotenv').config(); 
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('./models/User');
-const { sequelize, connectDB } = require('./database'); 
+const { sequelize, connectDB } = require('./database');
 const Task = require('./models/Task');
 const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_key';
 const app = express();
@@ -30,7 +30,7 @@ const startServer = async () => {
 
   } catch (error) {
     console.error('Critical System Boot Failure:', error.message);
-    process.exit(1); 
+    process.exit(1);
   }
 };
 
@@ -112,9 +112,8 @@ app.post('/api/tasks', async (req, res) => {
   try {
     const { title, status, priority, description, assignedTo } = req.body;
 
-    // 1. JWT Authentication
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; 
+    const token = authHeader && authHeader.split(' ')[1];
     if (!token) return res.status(401).json({ error: "Access Denied." });
 
     let decodedUser;
@@ -124,7 +123,6 @@ app.post('/api/tasks', async (req, res) => {
       return res.status(403).json({ error: "Invalid token." });
     }
 
-    // 2. Permission Check
     const userRole = decodedUser.role.toLowerCase();
     const canAssignOthers = userRole === 'super_admin' || userRole === 'manager';
 
@@ -132,18 +130,8 @@ app.post('/api/tasks', async (req, res) => {
       return res.status(400).json({ error: "Missing required fields." });
     }
 
-    // 3. Logic:
-    let finalAssignedTo;
+    let finalAssignedTo = (canAssignOthers && assignedTo) ? parseInt(assignedTo, 10) : decodedUser.id;
 
-    if (assignedTo && canAssignOthers) {
-      // MANAGER: Assigning to specific ID
-      finalAssignedTo = parseInt(assignedTo, 10);
-    } else {
-      // EXECUTIVE or MANAGER (who left it blank): Force assign to self
-      finalAssignedTo = decodedUser.id;
-    }
-
-    // 4. Create Task
     const newTask = await Task.create({
       title,
       status: status || 'pending',
@@ -168,16 +156,17 @@ app.get('/api/team-members', async (req, res) => {
     const decodedUser = jwt.verify(token, JWT_SECRET);
 
     const role = decodedUser.role.toLowerCase();
-    
+
     let whereClause = {};
 
-    // 2. Logic: Super Admins see Managers & Executives. Managers see only Executives.
     if (decodedUser.role === 'super_admin') {
       whereClause = { role: ['manager', 'executive'] };
     } else if (decodedUser.role === 'manager') {
       whereClause = { role: 'executive' };
+    } else if (decodedUser.role === 'executive') {
+      return res.json([]);
     } else {
-      return res.status(403).json({ error: "Unauthorized access." });
+      return res.status(403).json({ error: "Invalid user role." });
     }
 
     const teamMembers = await User.findAll({
@@ -188,6 +177,53 @@ app.get('/api/team-members', async (req, res) => {
     return res.json(teamMembers);
   } catch (error) {
     return res.status(500).json({ error: "Failed to fetch team members." });
+  }
+});
+
+app.get('/api/tasks/stats', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: "Unauthorized" });
+
+    const decodedUser = jwt.verify(token, JWT_SECRET);
+
+    let whereClause = {};
+    if (decodedUser.role !== 'super_admin' && decodedUser.role !== 'manager') {
+      whereClause = { assignedTo: decodedUser.id };
+    }
+
+    const tasks = await Task.findAll({
+      where: whereClause,
+      include: [{
+        model: User,
+        as: 'assignee',
+        attributes: ['name']
+      }]
+    });
+
+    const stats = {
+      total: tasks.length,
+      pending: tasks.filter(t => t.status === 'pending').length,
+      inProgress: tasks.filter(t => t.status === 'in-progress').length,
+      review: tasks.filter(t => t.status === 'review').length,
+      completed: tasks.filter(t => t.status === 'completed').length
+    };
+
+    return res.json({ tasks, stats });
+  } catch (err) {
+    console.error("FULL ERROR DETAILS:", err);
+    return res.status(500).json({ error: "Failed to fetch tasks." });
+  }
+});
+
+app.delete('/api/tasks/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await Task.destroy({ where: { id } });
+    return res.status(200).json({ message: "Task deleted successfully" });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to delete task" });
   }
 });
 
